@@ -63,9 +63,8 @@ export default function DocumentsPage() {
     ? currentFolder.children
     : ROOT_ITEMS.map(item => ({ name: item.name, type: item.type }));
 
-  const allItems: FileItem[] = currentFolder
-    ? [...baseItems, ...uploadedFiles]
-    : [...baseItems];
+  /* 업로드 PDF는 루트·폴더 안 모두에서 동일 목록으로 표시 */
+  const allItems: FileItem[] = [...baseItems, ...uploadedFiles];
 
   const sorted = [...allItems].sort((a, b) => {
     if (sort === '이름') return a.name.localeCompare(b.name);
@@ -148,7 +147,12 @@ export default function DocumentsPage() {
               alt={item.name}
               width={56}
               height={56}
-              className="h-[56px] w-[56px]"
+              sizes="56px"
+              className={
+                item.type === 'folder'
+                  ? 'h-[56px] w-[56px] shrink-0'
+                  : 'box-border h-14 w-14 shrink-0 object-contain object-center p-1'
+              }
             />
             <span className="text-xs text-center text-gray-600 break-all leading-tight">
               {item.name}
