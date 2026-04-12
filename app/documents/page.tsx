@@ -25,7 +25,7 @@ type RootItem = FolderItem | { name: string; type: 'pdf' };
 /* ─── 폴더 구조 정의 ─── */
 const ROOT_ITEMS: RootItem[] = [
   {
-    name: '빅데이터 분석기사_3과목',
+    name: '빅데이터 분석기사',
     type: 'folder',
     children: [
       {
