@@ -118,47 +118,50 @@ export default function DocumentsPage() {
         </h1>
       </header>
 
-      {/* 정렬 탭 */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-        <div className="flex gap-4">
-          {(['날짜', '이름', '유형'] as SortType[]).map(s => (
+      {/* 중앙 정렬 콘텐츠 영역 */}
+      <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 px-8">
+        {/* 정렬 탭 */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-100">
+          <div className="flex gap-4">
+            {(['날짜', '이름', '유형'] as SortType[]).map(s => (
+              <button
+                key={s}
+                onClick={() => setSort(s)}
+                className={`text-sm pb-0.5 ${sort === s ? 'text-[#00D4E8] font-semibold border-b-2 border-[#00D4E8]' : 'text-gray-400'}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <button className="text-xs text-gray-400">목록으로 보기</button>
+        </div>
+
+        {/* 그리드 */}
+        <div className="flex-1 py-4 grid grid-cols-4 gap-4 content-start">
+          {sorted.map(item => (
             <button
-              key={s}
-              onClick={() => setSort(s)}
-              className={`text-sm pb-0.5 ${sort === s ? 'text-[#00D4E8] font-semibold border-b-2 border-[#00D4E8]' : 'text-gray-400'}`}
+              key={`${item.name}-${item.viewerFileName ?? ''}`}
+              onClick={() => handleItemClick(item)}
+              className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-[#F0FAFA] transition-colors"
             >
-              {s}
+              <Image
+                src={iconSrc(item)}
+                alt={item.name}
+                width={56}
+                height={56}
+                sizes="56px"
+                className={
+                  item.type === 'folder'
+                    ? 'h-[100px] w-[100px] shrink-0'
+                    : 'box-border h-23 w-23 shrink-0 object-contain object-center p-1'
+                }
+              />
+              <span className="text-xs text-center text-gray-600 break-all leading-tight">
+                {item.name}
+              </span>
             </button>
           ))}
         </div>
-        <button className="text-xs text-gray-400">목록으로 보기</button>
-      </div>
-
-      {/* 그리드 */}
-      <div className="flex-1 p-4 grid grid-cols-4 gap-4 content-start">
-        {sorted.map(item => (
-          <button
-            key={`${item.name}-${item.viewerFileName ?? ''}`}
-            onClick={() => handleItemClick(item)}
-            className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-[#F0FAFA] transition-colors"
-          >
-            <Image
-              src={iconSrc(item)}
-              alt={item.name}
-              width={56}
-              height={56}
-              sizes="56px"
-              className={
-                item.type === 'folder'
-                  ? 'h-[56px] w-[56px] shrink-0'
-                  : 'box-border h-14 w-14 shrink-0 object-contain object-center p-1'
-              }
-            />
-            <span className="text-xs text-center text-gray-600 break-all leading-tight">
-              {item.name}
-            </span>
-          </button>
-        ))}
       </div>
 
       {/* 업로드 버튼 */}

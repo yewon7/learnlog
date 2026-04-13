@@ -70,15 +70,13 @@ export default function LearnLogPage() {
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden pb-16">
-      <header className="bg-white border-b border-gray-100 h-14 flex items-center justify-between px-4 shrink-0">
+      <header className="bg-white border-b border-gray-100 h-14 flex items-center px-4 shrink-0">
         <h1 className="font-bold text-lg text-gray-800">Learn Log</h1>
-        <button className="w-8 h-8 rounded-full bg-[#00D4E8] text-white text-xs font-bold flex items-center justify-center">
-          Y
-        </button>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-[35%] bg-[#F5F5F5] flex flex-col border-r border-gray-200 overflow-hidden">
+        {/* 사이드바: 320px 고정, 화면 왼쪽 끝 */}
+        <div className="w-[320px] shrink-0 bg-[#F5F5F5] flex flex-col border-r border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 shrink-0">
             <button className="text-gray-500 text-lg">☰</button>
             <button className="text-[#00D4E8] text-xl font-bold">+</button>
@@ -122,9 +120,10 @@ export default function LearnLogPage() {
           </div>
         </div>
 
-        <div className="w-[65%] flex flex-col overflow-y-auto bg-white">
+        {/* 메인 콘텐츠: 사이드바 제외 나머지, 내부는 중앙 정렬 */}
+        <div className="flex-1 flex flex-col overflow-y-auto bg-white">
           {selected ? (
-            <div className="p-5 flex flex-col gap-4">
+            <div className="max-w-3xl mx-auto w-full px-8 py-5 flex flex-col gap-4">
               <div className="flex justify-end">
                 <div className="bg-[#00D4E8] text-white text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] whitespace-pre-wrap">
                   {selected.question}
@@ -132,7 +131,7 @@ export default function LearnLogPage() {
               </div>
 
               <div className="flex items-start gap-2">
-                <span className="text-2xl mt-0.5">🔮</span>
+                <img src="/icons/logo.png" alt="logo" className="w-8 h-8 object-contain" />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs text-gray-400 mb-1">{formatTime(selected.timestamp)}</div>
                   <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">

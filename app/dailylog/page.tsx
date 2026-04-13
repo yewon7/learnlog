@@ -192,18 +192,16 @@ ${JSON.stringify(questionsList)}
   return (
     <div className="flex flex-col min-h-screen pb-16" style={{ background: '#E8FAFA' }}>
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 h-14 flex items-center justify-between px-4 shrink-0">
+      <header className="bg-white border-b border-gray-100 h-14 flex items-center px-4 shrink-0">
         <h1 className="font-bold text-lg text-gray-800">Daily Log</h1>
-        <button className="w-8 h-8 rounded-full bg-[#00D4E8] text-white text-xs font-bold flex items-center justify-center">
-          Y
-        </button>
       </header>
 
-      <div className="flex-1 px-4 py-5 flex flex-col gap-6">
+      <div className="flex-1 flex justify-center">
+      <div className="max-w-4xl w-full px-8 py-5 flex flex-col gap-6">
         {/* Section 1: Top 3 */}
         <section>
           <div className="flex items-center gap-3 mb-4">
-            <Image src="/icons/top3.png" alt="trophy" width={36} height={36} />
+            <Image src="/icons/top3.png" alt="trophy" width={80} height={80} />
             <h2 className="text-lg font-bold leading-snug">
               What kept you{' '}
               <span className="text-green-500 font-extrabold">curious</span>{' '}
@@ -296,6 +294,7 @@ ${JSON.stringify(questionsList)}
             </section>
           </>
         )}
+      </div>
       </div>
 
       <BottomNav />

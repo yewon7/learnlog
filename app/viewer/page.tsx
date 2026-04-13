@@ -23,6 +23,23 @@ interface InlineBubble {
   pinned: boolean;
 }
 
+/** 하이라이트 (페이지별·localStorage) */
+interface HighlightRecord {
+  id: string;
+  pageNumber: number;
+  text: string;
+  /** canvas 크기 대비 비율로 저장 → 해상도 변해도 유지 */
+  rects: { x: number; y: number; w: number; h: number }[];
+}
+
+/** 코멘트 입력 말풍선 (임시 상태) */
+interface CommentBubble {
+  x: number;
+  y: number;
+  selectedText: string;
+  commentText: string;
+}
+
 /** 고정 말풍선 (페이지별·localStorage) */
 interface PinnedBubbleRecord {
   id: string;
@@ -30,10 +47,40 @@ interface PinnedBubbleRecord {
   highlightedText: string;
   aiAnswer: string;
   position: { top: number; left: number };
+  type?: 'ai' | 'comment';
 }
 
 function pinnedStorageKey(file: string) {
   return `learnlog_pinned_${file}`;
+}
+
+function highlightStorageKey(file: string) {
+  return `learnlog_highlights_${file}`;
+}
+
+function loadHighlightsFromStorage(file: string): HighlightRecord[] {
+  if (!file) return [];
+  try {
+    const raw = localStorage.getItem(highlightStorageKey(file));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (h): h is HighlightRecord =>
+        typeof h === 'object' && h !== null &&
+        typeof h.id === 'string' &&
+        typeof h.pageNumber === 'number' &&
+        typeof h.text === 'string' &&
+        Array.isArray(h.rects)
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveHighlightsToStorage(file: string, list: HighlightRecord[]) {
+  if (!file) return;
+  try { localStorage.setItem(highlightStorageKey(file), JSON.stringify(list)); } catch {}
 }
 
 function loadPinnedFromStorage(file: string): PinnedBubbleRecord[] {
@@ -185,7 +232,9 @@ function ViewerContent() {
   /* UI 상태 */
   const [selectionPopup, setSelectionPopup] = useState<SelectionPopup | null>(null);
   const [inlineBubble, setInlineBubble] = useState<InlineBubble | null>(null);
+  const [commentBubble, setCommentBubble] = useState<CommentBubble | null>(null);
   const [pinnedBubbles, setPinnedBubbles] = useState<PinnedBubbleRecord[]>([]);
+  const [highlights, setHighlights] = useState<HighlightRecord[]>([]);
   const [pinDrag, setPinDrag] = useState<{
     id: string;
     startX: number;
@@ -228,11 +277,12 @@ function ViewerContent() {
     return () => { cancelled = true; };
   }, [fileName]);
 
-  /* 자료(file) 바뀌면 페이지·고정 말풍선 로드 */
+  /* 자료(file) 바뀌면 페이지·고정 말풍선·하이라이트 로드 */
   useEffect(() => {
     if (!fileName) return;
     setCurrentPage(1);
     setPinnedBubbles(loadPinnedFromStorage(fileName));
+    setHighlights(loadHighlightsFromStorage(fileName));
   }, [fileName]);
 
   /* ─── 페이지 렌더링 (canvas + text layer) ─── */
@@ -461,8 +511,75 @@ ${text}`;
 
   /* ─── Highlight ─── */
   function handleHighlight() {
+    if (!selectionPopup || !canvasRef.current) {
+      setSelectionPopup(null);
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      setSelectionPopup(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const clientRects = Array.from(range.getClientRects());
+    const rects = clientRects
+      .filter(r => r.width > 1 && r.height > 1)
+      .map(r => ({
+        x: (r.left - canvasRect.left) / canvasRect.width,
+        y: (r.top - canvasRect.top) / canvasRect.height,
+        w: r.width / canvasRect.width,
+        h: r.height / canvasRect.height,
+      }));
+
+    if (rects.length > 0) {
+      const record: HighlightRecord = {
+        id: uuidv4(),
+        pageNumber: currentPage,
+        text: selectionPopup.text,
+        rects,
+      };
+      setHighlights(prev => {
+        const next = [...prev, record];
+        if (fileName) saveHighlightsToStorage(fileName, next);
+        return next;
+      });
+    }
     setSelectionPopup(null);
     window.getSelection()?.removeAllRanges();
+  }
+
+  /* ─── Add Comment ─── */
+  function handleAddComment() {
+    if (!selectionPopup) return;
+    setCommentBubble({
+      x: selectionPopup.x,
+      y: selectionPopup.y,
+      selectedText: selectionPopup.text,
+      commentText: '',
+    });
+    setSelectionPopup(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
+  function handlePinComment() {
+    if (!commentBubble || !commentBubble.commentText.trim() || !fileName) return;
+    const left = Math.min(commentBubble.x, Math.max(0, canvasSize.w - 300));
+    const top = commentBubble.y + 12;
+    const record: PinnedBubbleRecord = {
+      id: uuidv4(),
+      pageNumber: currentPage,
+      highlightedText: commentBubble.selectedText,
+      aiAnswer: commentBubble.commentText.trim(),
+      position: { top, left },
+      type: 'comment',
+    };
+    setPinnedBubbles(prev => {
+      const next = [...prev, record];
+      savePinnedToStorage(fileName, next);
+      return next;
+    });
+    setCommentBubble(null);
   }
 
   /* ─── 전체 읽기: 채팅 모드 진입 ─── */
@@ -691,6 +808,26 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
         <div className="p-4 flex justify-center">
           <div className="relative shadow-md rounded">
             <canvas ref={canvasRef} />
+            {/* 하이라이트 오버레이 — canvas와 동일 좌표계 */}
+            {canvasSize.w > 0 && highlights
+              .filter(h => h.pageNumber === currentPage)
+              .flatMap(h =>
+                h.rects.map((r, ri) => (
+                  <div
+                    key={`${h.id}-${ri}`}
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: r.x * canvasSize.w,
+                      top: r.y * canvasSize.h,
+                      width: r.w * canvasSize.w,
+                      height: r.h * canvasSize.h,
+                      backgroundColor: 'rgba(0, 212, 232, 0.28)',
+                      zIndex: 1,
+                    }}
+                  />
+                ))
+              )
+            }
             {/* text layer - selectable overlay */}
             <div ref={textLayerRef} className="textLayer" />
 
@@ -734,6 +871,52 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
               </div>
             )}
 
+            {/* 코멘트 입력 말풍선 */}
+            {commentBubble && (
+              <div
+                data-popup="true"
+                className="absolute z-20 bg-white border border-gray-200 rounded-2xl shadow-xl p-4 w-80"
+                style={{
+                  left: Math.min(commentBubble.x, canvasSize.w - 330),
+                  top: commentBubble.y + 12,
+                }}
+              >
+                <p className="text-xs text-gray-400 mb-2 truncate">
+                  "{commentBubble.selectedText.slice(0, 35)}{commentBubble.selectedText.length > 35 ? '…' : ''}"
+                </p>
+                <textarea
+                  autoFocus
+                  value={commentBubble.commentText}
+                  onChange={e => setCommentBubble(prev => prev ? { ...prev, commentText: e.target.value } : null)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePinComment(); } }}
+                  placeholder="코멘트를 입력하세요..."
+                  rows={3}
+                  className="w-full text-sm text-gray-700 border border-gray-200 rounded-xl px-3 py-2 outline-none resize-none focus:border-[#00D4E8] mb-3"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePinComment}
+                    disabled={!commentBubble.commentText.trim()}
+                    className="flex-1 text-xs py-1.5 rounded-lg bg-[#00D4E8] text-white font-semibold disabled:opacity-40"
+                  >
+                    고정하기
+                  </button>
+                  <button
+                    onClick={() => setCommentBubble(null)}
+                    className="flex-1 text-xs py-1.5 rounded-lg bg-gray-100 text-gray-500 font-semibold"
+                  >
+                    취소
+                  </button>
+                </div>
+                <button
+                  onClick={() => setCommentBubble(null)}
+                  className="absolute top-2 right-3 text-gray-300 hover:text-gray-500 text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* 고정된 말풍선 — 현재 페이지만 */}
             {pinnedBubbles
               .filter(b => b.pageNumber === currentPage)
@@ -741,14 +924,14 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
               <div
                 key={b.id}
                 data-popup="true"
-                className="absolute z-10 bg-yellow-50 border border-yellow-200 rounded-2xl shadow-lg w-72 overflow-hidden"
+                className={`absolute z-10 rounded-2xl shadow-lg w-72 overflow-hidden border ${b.type === 'comment' ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}
                 style={{
                   left: b.position.left,
                   top: b.position.top,
                 }}
               >
                 <div
-                  className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-yellow-200/90 bg-amber-100/50 cursor-grab active:cursor-grabbing select-none shrink-0"
+                  className={`flex items-center justify-between gap-2 px-2 py-1.5 border-b cursor-grab active:cursor-grabbing select-none shrink-0 ${b.type === 'comment' ? 'border-blue-200/90 bg-blue-100/50' : 'border-yellow-200/90 bg-amber-100/50'}`}
                   onMouseDown={(e) => {
                     if ((e.target as HTMLElement).closest('[data-pin-close]')) return;
                     e.preventDefault();
@@ -814,7 +997,7 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
             </button>
             <button
               data-popup="true"
-              onClick={() => setSelectionPopup(null)}
+              onClick={handleAddComment}
               className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded-lg font-semibold whitespace-nowrap"
             >
               Add Comment
@@ -825,7 +1008,7 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
         {/* 페이지 컨트롤 */}
         <div className="sticky bottom-0 bg-white/90 border-t border-gray-100 flex items-center justify-center gap-4 py-2">
           <button
-            onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setInlineBubble(null); setSelectionPopup(null); }}
+            onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setInlineBubble(null); setSelectionPopup(null); setCommentBubble(null); }}
             disabled={currentPage <= 1}
             className="px-4 py-1.5 rounded-lg bg-[#F0FAFA] text-[#00D4E8] font-bold disabled:opacity-30 text-sm"
           >
@@ -833,7 +1016,7 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
           </button>
           <span className="text-sm text-gray-500">{currentPage} / {totalPages || '?'}</span>
           <button
-            onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); setInlineBubble(null); setSelectionPopup(null); }}
+            onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); setInlineBubble(null); setSelectionPopup(null); setCommentBubble(null); }}
             disabled={currentPage >= totalPages}
             className="px-4 py-1.5 rounded-lg bg-[#F0FAFA] text-[#00D4E8] font-bold disabled:opacity-30 text-sm"
           >
