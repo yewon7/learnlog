@@ -287,7 +287,7 @@ ${JSON.stringify(questionsList)}
             <section className="flex flex-col gap-4">
               {gapAnalysis.gaps.map((g, i) => (
                 <div key={i} className="bg-white rounded-2xl p-4 shadow-sm">
-                  <h3 className="font-bold text-[#00D4E8] text-sm mb-2">
+                  <h3 className="font-bold text-[#00D4E8] text-lg mb-2">
                     {g.title}이란?
                   </h3>
                   <p className="text-sm text-gray-600 leading-relaxed">{g.description}</p>

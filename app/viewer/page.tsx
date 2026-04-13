@@ -131,6 +131,40 @@ function getTodayStr() {
   }).replace(/\. /g, '.').replace(/\.$/, '');
 }
 
+/** 전체 읽기 답변: 요약 / --- / 심화 */
+const FULL_READ_SPLIT = /\n-{3,}\s*\n/;
+
+function splitSummaryAndDeep(text: string): { summary: string; deep: string | null } {
+  const parts = text.split(FULL_READ_SPLIT);
+  if (parts.length < 2) return { summary: text, deep: null };
+  return {
+    summary: parts[0].trim(),
+    deep: parts.slice(1).join('\n\n').trim() || null,
+  };
+}
+
+function AiMessageContent({ text }: { text: string }) {
+  const { summary, deep } = splitSummaryAndDeep(text);
+  if (!deep) {
+    return <div className="whitespace-pre-wrap text-sm">{text}</div>;
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <section>
+        <p className="text-xs font-semibold text-gray-500 mb-1.5">요약</p>
+        <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+          {summary}
+        </div>
+      </section>
+      <div className="border-t border-dashed border-gray-200" role="separator" />
+      <section>
+        <p className="text-xs font-semibold text-[#00D4E8] mb-1.5">심화 설명</p>
+        <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{deep}</div>
+      </section>
+    </div>
+  );
+}
+
 /* ─── 메인 컴포넌트 ──────────────────────────────── */
 function ViewerContent() {
   const router = useRouter();
@@ -152,6 +186,13 @@ function ViewerContent() {
   const [selectionPopup, setSelectionPopup] = useState<SelectionPopup | null>(null);
   const [inlineBubble, setInlineBubble] = useState<InlineBubble | null>(null);
   const [pinnedBubbles, setPinnedBubbles] = useState<PinnedBubbleRecord[]>([]);
+  const [pinDrag, setPinDrag] = useState<{
+    id: string;
+    startX: number;
+    startY: number;
+    origLeft: number;
+    origTop: number;
+  } | null>(null);
 
   /* 채팅 모드 상태 */
   const [chatMode, setChatMode] = useState(false);
@@ -306,6 +347,44 @@ function ViewerContent() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  /* ─── 고정 말풍선 드래그 ─── */
+  useEffect(() => {
+    if (!pinDrag) {
+      document.body.style.cursor = '';
+      return;
+    }
+    document.body.style.cursor = 'grabbing';
+    const maxLeft = Math.max(0, canvasSize.w - 288);
+
+    function onMove(e: MouseEvent) {
+      const drag = pinDrag;
+      if (!drag) return;
+      let left = drag.origLeft + (e.clientX - drag.startX);
+      let top = drag.origTop + (e.clientY - drag.startY);
+      left = Math.max(0, Math.min(left, maxLeft));
+      top = Math.max(0, top);
+      setPinnedBubbles(prev =>
+        prev.map(b => (b.id === drag.id ? { ...b, position: { left, top } } : b))
+      );
+    }
+
+    function onUp() {
+      setPinDrag(null);
+      setPinnedBubbles(prev => {
+        if (fileName) savePinnedToStorage(fileName, prev);
+        return prev;
+      });
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+  }, [pinDrag, canvasSize.w, fileName]);
+
   /* ─── 텍스트 선택 감지 ─── */
   function handleMouseUp(e: React.MouseEvent<HTMLDivElement>) {
     // 팝업 버튼 클릭은 무시
@@ -396,17 +475,22 @@ ${text}`;
     setChatMode(true);
     setInlineBubble(null);
 
-    // AI 전체 답변 불러오기
-    const prompt = `질문에 답한다.
+    const prompt = `사용자에게 이미 짧은 요약이 제공된 상태이다. 아래 질문·참고 텍스트를 바탕으로
+심화 설명만 작성한다. 요약 문장은 다시 쓰지 않는다.
+심화 설명에는 개념의 배경, 예시, 관련 개념을 포함한다.
+말투는 '~이다', '~한다' 체로 통일한다. 마크다운 볼드(**)는 쓰지 않는다.
 
 질문: ${inlineBubble.selectedText}
 
 페이지에서 추출한 참고 텍스트:
-${currentPageText.slice(0, 500)}`;
+${currentPageText.slice(0, 800)}`;
 
     setChatLoading(true);
-    callGemini(prompt).then(answer => {
-      setChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+    callGemini(prompt, { noSystem: true }).then(deepOnly => {
+      const summaryPart = inlineBubble.summary.trim();
+      const deepPart = deepOnly.trim();
+      const combined = `${summaryPart}\n---\n${deepPart}`;
+      setChatMessages(prev => [...prev, { role: 'ai', text: combined }]);
       setChatLoading(false);
     }).catch((err) => {
       const msg = err instanceof Error ? err.message : '오류가 발생했어요.';
@@ -531,8 +615,8 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
                 <div className="max-w-[85%]">
                   <div className="flex items-start gap-2">
                     <div className="w-8 h-8 rounded-full bg-[#00D4E8] flex items-center justify-center shrink-0 text-white text-xs font-bold">AI</div>
-                    <div className="bg-white border border-gray-100 shadow-sm text-sm px-4 py-3 rounded-2xl rounded-tl-sm leading-relaxed whitespace-pre-wrap">
-                      {msg.text}
+                    <div className="bg-white border border-gray-100 shadow-sm text-sm px-4 py-3 rounded-2xl rounded-tl-sm leading-relaxed">
+                      <AiMessageContent text={msg.text} />
                     </div>
                   </div>
                   {!msg.saved && (
@@ -565,27 +649,23 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
 
         {/* 입력창 */}
         <div className="border-t border-gray-100 p-3 bg-white shrink-0">
-          <div className="flex items-end gap-2 bg-[#F0FAFA] rounded-2xl px-4 py-2.5">
+          <div className="flex items-center gap-2 bg-[#F0FAFA] rounded-2xl px-4 py-2.5">
             <input
               type="text"
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleChatSend(); }}
               placeholder="추가 질문하기"
-              className="flex-1 bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
+              className="flex-1 min-w-0 bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
             />
-            <div className="flex items-center gap-3 shrink-0 text-gray-400">
-              <button>🖼</button>
-              <button>{"<>"}</button>
-              <button>🎤</button>
-              <button
-                onClick={handleChatSend}
-                disabled={!chatInput.trim() || chatLoading}
-                className="w-8 h-8 rounded-full bg-[#00D4E8] text-white flex items-center justify-center disabled:opacity-40"
-              >
-                ↑
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleChatSend}
+              disabled={!chatInput.trim() || chatLoading}
+              className="w-9 h-9 shrink-0 rounded-full bg-[#00D4E8] text-white flex items-center justify-center disabled:opacity-40"
+            >
+              ↑
+            </button>
           </div>
         </div>
       </div>
@@ -661,23 +741,48 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
               <div
                 key={b.id}
                 data-popup="true"
-                className="absolute z-10 bg-yellow-50 border border-yellow-200 rounded-2xl shadow-lg p-3 w-72"
+                className="absolute z-10 bg-yellow-50 border border-yellow-200 rounded-2xl shadow-lg w-72 overflow-hidden"
                 style={{
                   left: b.position.left,
                   top: b.position.top,
                 }}
               >
-                <p className="text-xs text-gray-500 mb-1 line-clamp-2" title={b.highlightedText}>
-                  “{b.highlightedText}”
-                </p>
-                <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{b.aiAnswer}</p>
-                <button
-                  type="button"
-                  onClick={() => removePinnedBubble(b.id)}
-                  className="absolute top-1.5 right-2.5 text-gray-300 hover:text-gray-500 text-xs"
+                <div
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-yellow-200/90 bg-amber-100/50 cursor-grab active:cursor-grabbing select-none shrink-0"
+                  onMouseDown={(e) => {
+                    if ((e.target as HTMLElement).closest('[data-pin-close]')) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPinDrag({
+                      id: b.id,
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      origLeft: b.position.left,
+                      origTop: b.position.top,
+                    });
+                  }}
+                  title="드래그하여 이동"
                 >
-                  ✕
-                </button>
+                  <span className="flex gap-0.5 text-gray-500" aria-hidden>
+                    <span className="block w-1 h-3 rounded-sm bg-current opacity-60" />
+                    <span className="block w-1 h-3 rounded-sm bg-current opacity-60" />
+                    <span className="block w-1 h-3 rounded-sm bg-current opacity-60" />
+                  </span>
+                  <button
+                    type="button"
+                    data-pin-close
+                    onClick={() => removePinnedBubble(b.id)}
+                    className="text-gray-400 hover:text-gray-600 text-sm px-1 py-0.5 rounded cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-3 pt-2">
+                  <p className="text-xs text-gray-500 mb-1 line-clamp-2" title={b.highlightedText}>
+                    “{b.highlightedText}”
+                  </p>
+                  <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{b.aiAnswer}</p>
+                </div>
               </div>
             ))}
           </div>
