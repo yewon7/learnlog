@@ -19,8 +19,8 @@ export default function SplashPage() {
       <Image
         src="/icons/logo.png"
         alt="LearnLog Logo"
-        width={180}
-        height={180}
+        width={230}
+        height={230}
         priority
       />
       <p
