@@ -1006,7 +1006,7 @@ JSON 형식으로만 응답: {"concept":"개념명","definition":"한 줄 정의
         )}
 
         {/* 페이지 컨트롤 */}
-        <div className="sticky bottom-0 bg-white/90 border-t border-gray-100 flex items-center justify-center gap-4 py-2">
+        <div className="sticky bottom-0 left-0 right-0 bg-white/90 border-t border-gray-100 flex items-center justify-center gap-4 py-2 z-20">
           <button
             onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setInlineBubble(null); setSelectionPopup(null); setCommentBubble(null); }}
             disabled={currentPage <= 1}
