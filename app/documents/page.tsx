@@ -29,14 +29,14 @@ const ROOT_ITEMS: RootItem[] = [
     type: 'folder',
     children: [
       {
-        name: '[빅분기] 1과목_빅데이터_분석_기획.pdf',
+        name: '빅분기 1과목',
         type: 'pdf',
-        viewerFileName: '빅분기_1과목_빅데이터_분석_기획.pdf',
+        viewerFileName: 'sample1.pdf',
       },
       {
-        name: '[빅분기] 2과목_빅데이터_탐색.pdf',
+        name: '빅분기 2과목',
         type: 'pdf',
-        viewerFileName: '빅분기_2과목_빅데이터_탐색.pdf',
+        viewerFileName: 'sample2.pdf',
       },
     ],
   },
